@@ -1,77 +1,4 @@
-'''
-########################################################
-## PROGRAM NAME: parse_zoning_txt.py                  ##
-## PROJECT: NATIONAL ZONING AND LAND USE DATABASE     ##
-## AUTHORS: MATT MLECZKO, SCOTT OVERBEY               ##
-## DATE CREATED:                                      ##
-## INPUTS:  User input .txt files                     ##
-##          ZoningWeightedKeywords.csv                ##
-##                                                    ##
-## OUTPUTS:  .xls file with user-defined name         ##
-##                                                    ##
-## PURPOSE: Parse input zoning and land use text      ##
-##          data and output database                  ##
-########################################################
 
-'''
-
-'''
-OVERALL PROCESS 
-
-This program is a collection of functions. It is executed by running the finfun function, which triggers 
-the rest of the nested functions. The one input argument for finfun is "filenames", which stores all the .txt files 
-that are located in the input filepath that the user supplies. The finfun function then loops through these .txt 
-files one at a time through "file", which is often the input into the nested functions of this program. The chronological 
-sequence of functions once finfun is called is as follows
-
-(1) finfun(file)
-(2) getmatches
-(3) getkeywords
-(4) string_standardize
-(5) fnote_fix
-(6) threshold_mark
-(7) matchvalue (nested in threshold_mark)
-(8) densityinfo (also triggers fractonum and text2int)
-(9) heightinfo (also triggers fractonum and text2int)
-(10) parkinginfo (also triggers fractonum and text2int)
-(11) resdis
-(12) buildtablel1
-(13) buildtablel2
-(14) get_ts
-
-TIPS FOR DEBUGGING 
-
-This program and its constituent functions are written as a series of many loops. Oftentimes, the most straightforward
-way of resolving an error in the code or determining how certain values are output is to print values along the sequence
-of loops to determine how the code is handling a particular input text data. Some examples of this can be seen throughout 
-the source code. Similarly, the code currently displays the filepath of each input file as it loops through all input files. 
-The user is recommended to leave this as is since it helps determine which file is encountering an issue or error. The
-same logic applies to printing particular values or signposts for particular functions or portions of functions. 
-
-'''
-
-###########################
-## IMPORTANT USER INPUTS ##
-###########################
-
-# OUTPUT FILE NAME #
-## NOTE: this file will save to same directory as this program ##
-outputfilename = "INPUT HERE.xls"
-
-# INPUT FOLDER FILE PATH TO INPUT .TXT FILES #
-filedirect = "INPUT HERE"
-
-# INPUT FOLDER FILE PATH TO KEYWORDS FILE #
-kwpath = "INPUT HERE"
-
-# KEYWORD CSV FILE NAME (include extension) #
-kwfile = "INPUT HERE"
-
-###########################
-###########################
-
-
-## import necessary modules ##
 
 import os
 import csv
@@ -85,6 +12,70 @@ from statistics import mode
 import collections
 import itertools
 from iteration_utilities import deepflatten
+import json
+
+
+
+# OUTPUT FILE NAME #
+#outputfilename = "test.xls"
+
+# INPUT FOLDER FILE PATH TO INPUT .TXT FILES #
+#filedirect = "/restricted/projectnb/trucks/William/Mleczko_and_Desmond/nzlud/municipal_codes/1/"
+
+# INPUT FOLDER FILE PATH TO KEYWORDS FILE #
+# kwpath = "/restricted/projectnb/trucks/William/Mleczko_and_Desmond/nzlud/August_2_2024/"
+
+
+# # KEYWORD CSV FILE NAME (include extension) #
+# kwfile = "ZoningWeightedKeywords.csv"
+
+# #import os
+# id = int(os.getenv("SGE_TASK_ID", 1))
+# outputfilename = f"run_{id}.xls"
+
+# # INPUT FOLDER FILE PATH TO INPUT .TXT FILES #
+# filedirect = f"/restricted/projectnb/trucks/William/Mleczko_and_Desmond/nzlud/municipal_codes_all/{id}/"
+
+# OUTPUT FILE NAME #
+## NOTE: this file will save to same directory as this program ##
+outputfilename = "test.xls"
+
+# INPUT FOLDER FILE PATH TO INPUT .TXT FILES #
+filedirect = "C:/Users/clint/Desktop/nzlud/municipal_codes_all/test/"
+
+# INPUT FOLDER FILE PATH TO KEYWORDS FILE #
+kwpath = "C:/Users/clint/Desktop/nzlud/"
+
+# KEYWORD CSV FILE NAME (include extension) #
+kwfile = "ZoningWeightedKeywords.csv"
+
+
+
+
+import csv
+
+# Define the header
+header = ["Location","Measure", "Initial_Match", "Num_Matches_Found", "+-250_Text", "Weights_Matches", "Weight Values","Weight Result"]
+
+# Example data to populate the CSV
+data = [
+]
+
+# Create and write to the CSV file
+with open('text_collector.csv', mode='w', newline='') as file:
+    writer = csv.writer(file)
+    writer.writerow(header)  # Write the header
+    writer.writerows(data)   # Write the data
+
+
+
+# Construct the full path to the CSV file
+full_path = kwpath + kwfile
+# Load the CSV file into a DataFrame
+df = pd.read_csv(full_path)
+# Extract the first column entries
+measures = df.iloc[:, 0].tolist()
+measures
 
 
 '''
@@ -141,6 +132,9 @@ the task of converting keywords to weights easier and faster.
 
 def string_standardize(strng):
     replacement_dict = {
+        'warehouse': ['warehouses', 'mini-warehouse', 'mini-warehouses','miniwarehouse','miniwarehouses'],
+        'office': ['offices'],
+        'laboratory': ['laboratories'],
         'amendment': ['amendments'],
         'acre': ['acres','ac\.'],
         ' percent': ['%'],
@@ -226,144 +220,21 @@ def fnote_fix(string):
 ## set of stopwords to prevent false positive matches ##
 
 stopwords = r"""(?x)          # Turn on free spacing mode
-                    (?:
+                    (
                       \b
-                      ((?<!multi\sfamily\sresidential\sdevelopments\sin\sthe\sdistrict\sshall\shave\sa\sminimum\sarea\sof\s\d+\ssquare\-feet\sof\s|prohibiting\sall\s|residential\s)commercial\s(?!condominiums)|
-                      (?<!residential\scommercial\sor\s)industrial|industry|(?<!parking\sand\soff\-street\s)loading\sspaces|
-                      vehicle|bicycle|bike|trucks|cattery\spermit|fattening\smarketing|outdoor\sathletic|security\sfences|
-                      rv\spark|shopping|budget|(?<!\d+\-)year|id\s*\-\s*rc\sdistrict\szone\scontrols|c\-ol\sdistrict\slot\sstandards|
-                      grocery|special\sdistrict|(?<!multi\sfamily\sresidential\sdevelopment\sin\sthe\s)cc|historic\spreserve\scluster|
-                      gc|animal|animals|adult\sentertainment|manufactured\shome\sparks\smust\smeet\sthe\sfollowing\srequire|
-                      educational|colleges|college|cultural|subarea|trucking|truck|operating\sthe\sfacility|
-                      highways|(?<!abutting\sland\sreserve\sfor\s)highway|recycling|storage|(?<!non\-)farm|bus|camp|camps|pod|pd|day\scare|hotel|motel|hotels|
-                      consolidated\sparcel|non\-conforming|signage|motels|fields\sand\scourses\sshall\sbe\sa\sminimum\sof|
-                      barn|barns|greenhouses|greenhouse|vehicle|vehicles|beverages|railroad|energy|
-                      personal\scare\sboarding\shome|portion\sof\sa\sconvenience\sstore|other\sretail\ssales|
-                      equipment|patients|private\sstreet|(?<!central\s)business\s(?!district)|restaurant|
-                      motel|day\-care|shop|unincorporate|lot\son\swhich\sthe\sfacility\sis\slocated|
-                      for\spark\sand\sopen\sspace\susage|cumulative\searth\sdisturbance|public\shearing\sapprove|
-                      acre\stotal\sexceed|farmland|bp\-or|cs|i\-r|repairs|wetlands|tree|o\/id|fast\-food|
-                      lot\sreserve\sflag\slot\sa\sbuildable\slot\swhere|multiplying\sthe\snet\sdevelopable\sacreage|
-                      cbc\sdevelopment|public\sassembly|mall|pharmacies|canopy|\w{1}\slandscaped\sroundabouts|
-                      service\sstation|service\sstations|worship|pcd|private\sstreets|adult\-oriented|sanitarium|tavern|
-                      contiguous\sacre|cemeteries|hospital|hospitals|used\sby\ssuch\sinstitution|
-                      county\shealth\sdepartment|garage\ssize\sit\sis\sintended|sleeping\sroom\sshall\sbe|
-                      net\sland\sarea\sshall\sbe\srequire\sto\saccommodate\sthe\sundefined\suse|permanent\sscreen\sbuffer|
-                      except\swhere\sa\sspecific\szoning\sdistrict\srequire\smore\sthan\s\d+\sacre|
-                      board\sof\shealth|place\sof\sassembly|notes|(?<!recorder\'s\s)office|research|nursing\shomes|foster\scare|
-                      uranium|plutonium|stable|stables|dealerships|library|libraries|automobile|automobiles|
-                      wind\sturbine|mausoleum|police|assembly|livestock|freight|boat|deteriorating\sarea|
-                      mp\sdistrict|hi\sdistrict|(?<!except\scommercial\sdairies\scommercial\s)kennels|
-                      (?<!except\scommercial\sdairies\scommercial\s)kennel|radio|television|broadcasting|crops|assisted\sliving|
-                      campus|comprehensive\sguide\splan|foster\scare|(?<!housing\sfor\sthe\s)elderly\s(?!housing)|burlapped|plant\stype|
-                      group\sof\sadjacent\sparcels|products|derrick|rig|wcsquare\sfeets|cemetery|petting\sfarms|
-                      residential\szoning\sboundary|i\-\d+(?!\:\sno\sspecified\sminimum)|market|community\sfacilities|
-                      c\-\d+(?!\:\sno\sspecified\sminimum)|station|motor\sfuel|solid\swaste|motocross|parking\sstructure|
-                      applicant\sshall\ssubmit\sa\ssite\splan|structured\sparking\son\-site\seither\swithin\sthe\sbuilding|
-                      fumes|billboard|wtf|flagpole|gdp|use\sshall\soccupy\san\saccessory\sstructure|wall\smounted\ssign|
-                      vending|open\sspace\squotient|sign|signs|children|nursing|tower|towers|br\-cd|turbine|
-                      sign\sarea|ball|field|court|outdoor\sactivity|abutting\sresidential\sdistrict|institutional|
-                      telecommunications|constricted\sturning\smovements|parking\sareas|acre\plsnet\sbuildable|
-                      where\sabutting\sa\sresidential\sdistrict|districts\sin\swhich\suse\smay\sbe\spermitted|parking\sstalls|
-                      recreational\soperation|recreational\sbuildings|adult|personal\scare\sbuilding|church|
-                      authorize\sbuildings|common\sparking|combination\sof\suses|point\sbetween\sany\s\d+\sbuildings|
-                      vibration|smoke|rodents|insects|for\sexample|example|examples|mining|adult|apiary|reational\spurpose|
-                      recreation|borough\ssolicitor|impoundment|helipad|operation|parking\sbays|auction|recreational|
-                      treatment\scenters|centers|town\scenter|rao\sdistrict|\d+\sacre\/\d+\ssquare\sfeet|condemned|
-                      mortuary|religious|nearest\sdimensional\sdistrict\scriteria|marijuana\sgrower|
-                      squares|landscaped\sarea|m\-\d+|hive|dog|dogs|horse|horses|pony|village\shousing|o\-p|
-                      maximum\ssize\sof\sthe\saccessory\sbuilding|pigeons|lot\sarea\smaximum\ssize|decorative\sfence|
-                      more\sthan\sthe\sminimum\s\d+\sacre\smay\sbe\sallowed|rectory|permitted\sreductions|wholesale|
-                      itc|lighting|solar|crops|pastures|ranch|step\s\d+|illudus|gross\sarea\sof\sthe\sdevelopment|
-                      shooting\srange|placement\spermit|adjacent\sto\sa\sone\-family\sor\stwo\-family\sresidential\szoning\sdistrict|
-                      opaque\sscreen|chicken|coop|community\splan|pic\-ol|long\-term\sand\sextended\scare|wharf|
-                      individual\slot\ssizes\sguided\sby\sstandards\scontained\sin|plazas|access\sto\sthe\ssite|private\sclubs|
-                      minimum\sdepth\sof\ssetback|utd\sprojects|national\sregister|variable\slot\ssize\sdevelopment|
-                      marijuana\sdispensaries|gallons\sper\ssquare|phased\soverall\sdevelopment|cmu|pergolas|landscaping|
-                      manufacturing|using\sa\sminimum\slot\ssize\sof|mf\szone|rezone|non\-residential(?!\suses\spermitted)|
-                      landscape|center\sin\sthe\scity|no\sminimum\slot\ssize\sestablished\sfor\ssubdivided\sproperties|
-                      b\-\d+\sdistrict(?!\s1\smulti\sfamily\sunit)|rectories|adjacent\sto\sa\sresidential\sdistrict|sleeping\srooms|junk\syards|
-                      senior\sresidential\sdwelling\sdevelopment|in\sthe\si\sdistrict|planned\smultiple\sproject|
-                      attached\ssingle\sfamily\sdevelopments|faa|special\sexceptions|senior\scitizen|natural\shazard|
-                      funeral|extraction\soperations|higher\seducation|i\-g\sdistrict|salvage|
-                      breakfast|high\-rise\sapartments|total\sarea\sof\sthe\slot\scovered\sby\sbuildings\sparking\slot|
-                      mid\-rise\sapartments|subdivision\splan|lodging\srentals|lot\ssize\sfee|(?<!high\sdensity\s)puds|watchman|
-                      mini\-warehousing|game\smanagement|bp\sdistrict|pmxd\-\d+|lot\ssize\sannual\sfee|canal\scompany|
-                      water\sper\sacre\sof\sland|pc-\d+|for\suses\sother\sthan\sdwellings|dollars|roadside\sstands|
-                      programs\sevents|merchandise\ssales|public\sparks|port|home\soccupation\sshall\smeet|operations|
-                      loading\sberth|professional\ss ervices|dancing|seminaries|special\sexception\swhere\slocated|
-                      secondary\srural\sroads|proprietary|convalescent\scenter|clubs|curriculum|open\sair\sbusiness|
-                      number\sof\sbedrooms\sminimum\sfloor\sarea|honey\sbees|honey\sbee|submit\sa\splan|swale|
-                      public\sswimming\spools|multiplefamily\sdevelopment|dividing\sthe\snet\slot\sarea\sby|
-                      standards\sfor\sminimum\sfloor\sarea\sare\sas\sfollows|ccr\szone\sdevelopment\sstandards|
-                      life\scare|supervision\sof\sresidents|land\sdonation|assistance\shousing|internal\sstreet\ssystem|
-                      \d+\sdependent\selderly\shousing\sunit\sper\sdwelling\sunit\spermitted\sin\sthe\szoning\sdistrict|
-                      specific\sregulations\sfor\sa\ssewage\/liquid\streatment\sfacility|liquid\spipeline\sfacility|
-                      specific\sregulations\sfor\san\soutdoor\sutility\ssubstation\/distribution\sfacility|
-                      floor\sarea\sof\sdwellings\sshall\sbe\sas\sfollows\sfor\seach\sdistrict|
-                      restaurants\sshall\sbe\spermitted\sin\sup\sto\s25\spercent\sof\sthe\shid\sdistrict|
-                      table\sof\spublic\sfacilities\sdistrict|industrial\shazardous\swaste\smanagement\sfacility|
-                      standards\sfor\sthe\sschool\ss*\sdistrict\sare\sas\sfollows|time\sof\sdisplay\sbe\sless\sthan\s\d+\sseconds|
-                      exception\smay\sbe\sgrant\sunder\sthe\sfollowing\sconditions|seating\scapacity\srange|
-                      gross\sfloor\sarea\sof\sthe\saccessory\sapartment\shoused\swithin\san\sexisting\ssingle\sfamily\sdwelling|
-                      group\scare\sfacilities\saccommodating\sfrom|use\sas\san\segg\sproduction\shouse\sstockyard\sor\sfeedlot|
-                      table\s\w+\s\-*\sminimum\slot\ssize\sby\sliving\sarea\sor\sfloorspace|
-                      division\sof\sa\stract\sof\sland\sof\slegal\srecord\sinto\slot|average\ssize\sof\sall\slot\sof\sthe\shillside\sarea|
-                      permit\swith\san\sexception\sto\sthe\smaximum\sunit\ssize|average\sfloor\sarea\spermitted\sfor\seach\stype\sof\sunit|
-                      no\spart\sof\ssuch\suse\sshall\sbe\slocated\swithin\s\d+\sfeet\sof\sany\sresidence|industrial\spark\ssubdivision\sip\sintensity\sbonus|
-                      minimum\sstructural\sdesign\sstandards\:\srear\sor\sside\syard\sor\sattached\sgarage|
-                      no\spermit\sshall\sbe\sissue\sfor\sany\sprivate\swastewater\sdisposal\ssystem|amusement\sdevices\sshall\sbe\spermitted|
-                      private\syard\shaving\san\saggregate\snet\sarea\sper\sdwelling\sunit\sof\snot\sless\sthan\s\d+\s*\d*\ssquare\sfeet|
-                      exempt\sfrom\sthe\srequire\sfor\sfire\shydrants\sif\sall\sof\sthe\sfollowing\sconditions\sare\smet|
-                      minimum\sproperty\ssize\.*\sthe\sland\son\swhich\sthe\sproposed\sdevelopment\swill\sbe\ssited\sis\sa\sminimum\sof\s\d+\sacre|
-                      navigability\sof\sa\sstream\sor\sthe\slocation\sof\sthe\sordinary\shighwater\smark\sarise|in\sthe\scase\sof\snonresidential\sdistricts|
-                      the\smaximum\sfloor\sarea\sof\san\saccessory\sbuilding\slocated\sin\sa\sresidential\szone\sshall\snot\sexceed|
-                      existing\sstructures\swhich\sare\sconverted\sto\stwo\-family\sdwellings\sshall\scontain\sa\sminimum\sfloor\sarea\sof|
-                      gross\sfloor\sarea\sof\sless\sthan\sthe\sfollowing|at\sleast\s300\sfeet\sfrom\sany\sproperty\szoned\sfor\sresidential\spurposesquare\sfeet|
-                      accessory\sdwelling\sshall\sbe\soccupied\sby\sa\sperson\s\d+\s\d*\s*years\sor\solder|calculations\sresulting\sin\smajor\sfractions|
-                      used\scar\slot\sshall\shave\sa\stotal\slot\sarea\sof|length\sin\smiles\sof\ssewer\smain\sextension\sfrom\sexisting\smanhole\sto\ssite\sboundary|
-                      for\szoning\smap\samendment\sif\sthe\sarea\sis\snot\scontiguous|written\sstatement\sdetailing\show\sthe\sproposed\schange\sis\sallowable|
-                      minimum\sof\s\d+\sacre\sof\shigh\sground\sfor\sparks\saround\sponds|replacement\sof\simpacted\swetland\sarea|
-                      require\sin\swatershed\sdistricts\sand\sin\sother\swater|table\sof\sdimensional\sstandards\sconditional\-only\szoning\sdistricts|
-                      easement\slot\smeans\sa\slot\shaving\san\sarea\sof\sa\sminimum\sof\s\d+\sacre|minimum\slot\sarea\sof\s\d+\sacre\sis\srequire\sunless\sthe\sparkland\sis\sa\slong\slinear\strail|
-                      the\suseable\slot\sarea\sshall\sbe\sdetermined\sby\sdeducting\sfrom\sthe\stotal\slot\sarea|bonus\sdensity\sdesign|residential\scare\sfacilities\sshall\scomply\swith|
-                      manufactured\sdwelling\spark\sgeneral\sdevelopment\sstandards|a\scredit\sof\s\d+\.*\d*\sdwelling\sunit\sper\sacre\smay\sbe\spermitted\sabove\sthe\sbase\sdensity|
-                      net\sdensity\sper\sdwelling\sunit\spercentage\sof\sgross\sacre\srequire\sfor\sdedicationretail\sbody\sart|minimum\slot\ssize\sfor\sany\sstructure\sgreater\sthan\s\d+\sfeet\sin\sheight\sis\s\d+\ssquare\sfeet|
-                      zoning\sdistrict\swhichever\sis\sthe\slesser\son\szoning\slot\shaving\sa\slot\sarea\s\d+\sacre\sor\smore|the\sfacility\sshall\sbe\slocated\son\sa\szoning\slot\sthat\sis\sa\sminimum|
-                      ps\sadditional\srequire\snonresidential\sdevelopment|structures\sin\sthe\so\sdistrict|city\scouncil\smay\srequire\sthat\smobile\shomes|shall\sapply\sto\sall\smulti\sfamily\sland\suses\swithin\sthe|
-                      be\soperated\sby\sthe\sfamily\sresiding\son\sthe\spremises|minimum\slot\sarea\sfor\spublic\/non\-public\sschools|where\sit\sabuts\sa\sresidential\szone|wireless\scommunication\sfacilities)\b|
-                      secondary\sschools\sin\saccordance\swith\sthe\sfollowing\srequire\:|subdivision\shaving\sno\smore\sthan\s\d+\s*\d*\slot|maximum\snumber\sof\smobile\shomes|the\sdistrict\sshall\sencompass\sa\sminimum\sarea\sof\s\d+\sgross\sacre|
-                      contents\:|schools\sand\stheir\scustomary\srelated\suses\sprovide\:|lot\sarea\ssquare\sfeet\smaximum\spermitted\sdevelopment\scoverage\sless\sthan\s\d+\s\d+\%|the\sminimum\sfloor\sspace\sper\sfamily\sshall\sbe\sas\sfollows\:|
-                      maximum\spermitted\sbuilding\scoverage\sfor\sany\slot\scontaining\sa\sone\-family\sdetached\sdwelling\sin\san\sr\-2a\sr\-1a\sr\-1\/2a\sor\sr\-1\/4a\sdistrict\sshall\sbe\sas\sset\sforth\sbelow\:|
-                      determined\sby\smultiplying\sthe\spba\sby\sthe\smodified\sdensity|parcels\sbetween\s\d+\sand\s\d+\sacre\:|does\snot\sapply\sif\:|\w{1}\.\sthe\sfacility\sshall|the\slot\sfor\sthe\so\-1\sdistrict|
-                      the\shospice\smust\sbe\slocated\son\sa\slot\sof\srecord\swhich\smeets\sall\sof\sthe\sfollowing\scriteria\:|manufactured\shome\spark\sdevelopments\-general\srequire\.|treatment\sprogram|divide\sacreages|
-                      large\-scale\sretail\sestablishments\-\smay\sbe\spermitted|community\sfacility\ssite\sdevelopment\sstandards\.|corrections\sfacilities\.|shall\snot\sbe\slocated\swithin\s\d+\sfeet\sof\sany\sresidentially\szoned\sproperty|
-                      overlay\szoning\ssl\sshall\sbe\ssubject\sto\sthe\sfollowing\scriteria\:|if\slot\sare\slocated\sat\sthe\send\sof\sa\scul\-de\-sac|part\sof\san\sexisting\sfacility|advertising\sstructures|landowner\sshall\sbe\sdefined\sas|
-                      other\scivic\samenities\.|farmers\'\smarket\ssubject\sto)"""
+                      ()
+                      \b
+                    )"""
 
 header_stopwords = r"""(?x)          # Turn on free spacing mode
                     (
                       \b
-                      (industry|facility|loading\sspaces|ordinance|horse|horses|commercial\sdevelopment\sstandards|
-                      vehicle|bicycle|bike|ord.|rv\spark|shopping|budget|year|
-                      grocery|animal|animals|educational|colleges|college|cultural|block|trucking|truck|
-                      recycling|farm|bus|camp|camps|signage|farm|swimming\spools|vegetation|
-                      (?<!residential\sdistricts\s)non\-residential|
-                      swimming\spool|barn|barns|greenhouses|greenhouse|nonresidential|vehicle|vehicles|beverages|
-                      equipment|sewage|patients|private\sstreet|restaurant|motel|farmland|repairs|wetlands|
-                      shall|pdr|pdc|pdo|where\sthe\sminimum\slot\ssize\sis|~|(?<!garage\s)entrance|suchty\sabuts|
-                      commercial\sand\sindustrial\szones\sdevelopment\sstandards|is\srequire\sfor|
-                      is\sintended\sto\spreserve|c\s+gross\sdensity\:\sin\sthe|none|day\scare\shome|
-                      bulk\sregulations\sfor\sindustrial\sdistricts|industrial\sdistricts\sbulk\sregulations|article|
-                      pursuant|lake\sshores|storm\sdrainage\sbasins|\s\w{1}\.\s|studio|efficiency\s\d+|
-                      the\sminimum\slot\sarea\sfor\slot\sin\sthe|see\sdivision|
-                      minimum\sarea\sownership\sand\scontrol\sthe\ssite\sof\sthe\splanned\sunit\sdevelopment|
-                      within\sthe\ssubdivision\sarea\sas\sshown\son\sthe\scomprehensive\splan)
-                      \b|\(\)\.\s\(\)|density\sstandards\.\sthe\snet\sdensity\sin\sthe
-                      )"""
+                      ()
+                      \b
+                    )"""
 
 ## numbers is a regex meant to capture any instance of digit information ##
-## code adapted from Wiktor Stribiżew from StackOverflow: https://stackoverflow.com/questions/39594066/using-regex-extract-all-digit-and-word-numbers ##
+## code adapted from Wiktor Stribi|ew from StackOverflow: https://stackoverflow.com/questions/39594066/using-regex-extract-all-digit-and-word-numbers ##
 
 numbers = r"""(?x)          # Turn on free spacing mode
             (
@@ -422,175 +293,74 @@ Layer 2 = a list of matching strings for a particular question/measure
 Layer 3 = a list of matching keywords for a particular question/measure 
 '''
 
+
+
+def text_collector_writer(row_location, column_location, input):
+    file_name = 'text_collector.csv'
+    
+    # Check if the file exists
+    if os.path.exists(file_name):
+        # Read the existing contents of the file
+        with open(file_name, 'r', newline='') as file:
+            reader = csv.reader(file)
+            data = list(reader)
+    else:
+        # Create an empty list if the file does not exist
+        data = []
+    
+    # Ensure the data list is large enough to accommodate the specified row and column
+    while len(data) <= row_location:
+        data.append([])
+    while len(data[row_location]) <= column_location:
+        data[row_location].append('')
+    
+    # Write the input to the specified row and column
+    data[row_location][column_location] = input
+    
+    # Write the updated data back to the CSV file
+    with open(file_name, 'w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerows(data)
+
+def num_row_text_collector():
+    text_collector_df = pd.read_csv('text_collector.csv')
+    text_collector_num_rows = text_collector_df.shape[0]
+    return text_collector_num_rows
+
+
 def getmatches(file1,sn):
+    full_path = os.path.join(kwpath, kwfile)
+    df = pd.read_csv(full_path)
+    num_rows = df.shape[0]
+
+    text_collector_num_rows = num_row_text_collector()
+
     dicts = get_keywords()
-    matches = list(range(27))  # placeholders to prevent an Index Error later on
+    matches = list(range(num_rows))  # placeholders to prevent an Index Error later on
     gen_matches = []
     matches_shell = []
     test = []
     ## list of lists of keywords for each measure ##
-    biglist = [[r'residential subdivision building permits', r'unit ceiling',
+
+    warehouse = r'warehouse'
+    office = r'office'
+    laboratory = r'laboratory'
+    research = r'research'
+    commercial = r'commercial'
+    industrial = r'industrial'
+
+
+
+    biglist = [[#r'residential subdivision building permits', r'unit ceiling', warehouse,
                 r'growth management', r'growth control', r'growth rate', r'development approvals'],
-               [r'residential subdivision building permits', r'unit ceiling',
+               [#warehouse, r'unit ceiling',
                 r'growth management', r'growth control', r'growth rate', r'development approvals'],
-               [r'unit ceiling',
+               [#warehouse, r'unit ceiling',
                 r'growth management', r'growth control', r'growth rate', r'development approvals'],
-               [r'unit ceiling',
-                r'growth management', r'growth control', r'growth rate', r'development approvals'],
-               [r'unit ceiling',
-                r'growth management', r'growth control', r'growth rate', r'development approvals'],
-               [r'unit ceiling', r'dwelling units per building',
+               [#warehouse,r'unit ceiling', r'dwelling units per building',
                 r'growth management', r'growth control', r'growth rate', r'development approvals',
                 r'minimum additional lot area'],
-               [r'lot area', r'lot size', r'lot', r'area of parcel', r'zoning district', r'residential zones',
-                r'residential district', r'residential district r-1', 'residential district r-a', r'schedule of',
-                r'residential r-2 district', r'residential r-3 district', r'residential r-4 district',
-                r'dimension regulations', r'lot require', r'lot yard and density regulations',
-                r'dimensional regulations', r'dimensional require', r'dimensional and density regulations',
-                r'development standards', r'intensity of use', r'dimensional controls', r'zone dwelling family size',
-                r'intensity regulations', r'dimensional standards', r'dimension restrictions', r'parcel size',
-                r'maximum density', r'density', r'minimum building site area', r'bulk and replacement',
-                r'maximum unit allowed', r'height and area regulations', r'area and bulk schedule', r'area and bulk standards',
-                r'district design require', r'height and area require', r'lot and bulk standards',
-                r'height and lot require', r'area setback and height require', r'height area and yard require',
-                r'bulk and area regulations', r'density schedule', r'dimensional table', r'height and yard require',
-                r'bulk and yard regulations', r'spatial require', r'zoning district schedules',
-                r'lot standards by zone', r'development regulations', r'lot dimension and intensity standards',
-                r'density and bulk require', r'bulk regulations', r'bulk and placement regulations',
-                r'minimum lot size per dwelling unit', r'bulk and coverage controls', r'bulk require',
-                r'land space require', r'lot area frontage and yard require', r'yard and height require',
-                r'lot standards matrix', r'area yard and height standards', r'area yard and height regulations',
-                r'other dimensions and space require', r'area, yard and height regulations', r'bulk and area standards',
-                r'development criteria district', r'zone standards', r'height limit lot sizes and coverage',
-                r'land use district and allowable uses', r'summary of zoning district require', r'site dimensions',
-                r'bulk and setback regulations', r'residential bulk chart', r'bulk matrix',r'bulk yard and space require',
-                r'residential uses and require', r'zoning district regulation chart', r'density regulations',
-                r'standards for principal buildings on individual lots', r'lot and yard require',
-                r'lot yard area and height require', r'area yard and height require',
-                r'density dimensions and other standards', r'districts:', r'density and intensity limit',
-                r'bulk schedules'],
-               [r'lot area', r'lot size', r'lot', r'multiple dwelling', r'zoning district', r'residential district',
-                r'residential district r-1', r'height and lot require', r'zoning district schedules',
-                r'residential district r-a', r'residential r-2 district', r'residential r-3 district',
-                r'residential r-4 district', r'land area provide for each dwelling unit', r'dimensional table',
-                r'dimension regulations', r'dimensional regulations', r'dimensional require', r'zone dwelling family size',
-                r'lot yard and density regulations', r'area setback and height require', r'spatial require',
-                r'dimensional and density regulations', r'intensity of use', r'dimensional controls', r'area and bulk standards',
-                r'development standards', r'intensity regulations', r'dimensional standards', r'dimension restrictions',
-                r'schedule of', r'maximum permitted residential density', r'maximum allowable residential density',
-                r'maximum permitted density', r'maximum allowable density', r'maximum density', r'density',
-                r'residential acreage dwelling unit', r'lot require', r'height and area regulations',
-                r'height and yard require', r'height area and yard require', r'bulk yard and space require',
-                r'multi family', r'density schedule', r'maximum unit allowed', r'residential uses and require',
-                r'acre\/dwelling unit', r'per dwelling unit', r'for each dwelling unit', r'bulk and replacement',
-                r'dwelling unit per acre', r'square feet\/dwelling unit', r'unit\/net acre',
-                r'district design require', r'height and area require', r'lot and bulk standards', r'bulk require',
-                r'bulk and yard regulations',r'density regulations', r'site dimensions',
-                r'bulk and area regulations', r'lot standards by zone', r'summary of zoning district require',
-                r'development regulations', r'lot dimension and intensity standards', r'density and bulk require',
-                r'bulk regulations', r'bulk and placement regulations', r'minimum lot size per dwelling unit',
-                r'land space require', r'lot area frontage and yard require', r'yard and height require',
-                r'lot standards matrix', r'area yard and height standards', r'area yard and height regulations',
-                r'bulk and coverage controls', r'density dimensions and other standards',
-                r'other dimensions and space require', r'area, yard and height regulations', r'bulk and area standards',
-                r'development criteria district', r'zone standards', r'height limit lot sizes and coverage',
-                r'land use district and allowable uses', r'zoning district regulation chart',
-                r'bulk and setback regulations', r'residential bulk chart', r'bulk matrix',
-                r'standards for principal buildings on individual lots', r'area and bulk schedule', r'density and intensity limit'
-                r'lot and yard require', r'lot yard area and height require', r'area yard and height require',r'districts:',
-                r'bulk schedules'],
-               [r'open space'],
-               [r'inclusionary', r'affordable', r'mixed income housing', r'low cost housing'],
-               [r'city council', r'town council', r'village council', r'village board', r'township council',
-                r'the council', r'board of aldermen', r'city commission', r'borough council', r'board of selectmen',
-                r'board of supervisors', r'governing body', r'board of commissioners', r'board of mayor and aldermen',
-                r'mayor and council', r'board of trustees'],
-               [r'planning board', r'planning commission', r'planning and zoning commission', r'planning and zoning board',
-                r'planning and appeals commission', r'plan commission', r'planning and sustainability commission',
-                r'redevelopment board', r'zoning commission', r'land use board', r'the commission',
-                r'metropolitan development commission', r'development commission'],
-               [r'county board of commissioners', r'county board', r'county commissioners',
-                r'county board of supervisors', r'county commission', r'county council',
-                r'parish board of commissioners', r'parish board', r'parish commissioners',
-                r'parish board of supervisors', r'parish commission', r'parish council',
-                r'board of freeholders', r'board of chosen freeholders'],
-               [r'health department', r'department of health', r'public health board', r'public health commission'],
-               [r'site plan and architectural review board', r'site plan and architectural review commission',
-                r'site plan and architectural review committee',
-                r'architectural review board', r'architectural review commission', r'architectural review committee',
-                r'site plan review board', r'site plan review commission', r'site plan review committee',
-                r'design review board', r'design review commission', r'design review committee',
-                r'design board', r'design commission', r'design committee',
-                r'development review board', r'development review commission', r'development review committee',
-                r'visual resources review board'],
-               [r'environmental review board', r'environmental review committee', r'environmental commission',
-                r'environmental impact review board', r'environmental impact review committee',
-                r'environmental review advisory board', r'environmental review advisory committee',
-                r'environmental assessment board', r'environmental assessment committee'],
-               [r'city council', r'town council', r'village council', r'village board',r'township council',
-                r'the council', r'board of aldermen', r'city commission', r'borough council', r'board of selectmen',
-                r'board of supervisors', r'governing body', r'board of commissioners', r'board of mayor and aldermen',
-                r'mayor and council', r'board of trustees'],
-               [r'planning board', r'planning commission', r'planning and zoning commission', r'planning and zoning board',
-                r'planning and appeals commission', r'plan commission', r'planning and sustainability commission',
-                r'redevelopment board', r'zoning commission', r'land use board', r'the commission',
-                r'metropolitan development commission', r'development commission'],
-               [r'zoning board', r'board of zoning appeals', r'board of appeals', r'board of appeal',
-                r'board of adjustment and appeals', r'board of adjustment', r'zoning hearing board',
-                r'adjustment board', r'adjustment commission', r'adjustment committee'],
-               [r'county board of commissioners', r'county board', r'county commissioners',
-                r'county board of supervisors', r'county commission', r'county council',
-                r'parish board of commissioners', r'parish board', r'parish commissioners',
-                r'parish board of supervisors', r'parish commission', r'parish council',
-                r'board of freeholders', r'board of chosen freeholders'],
-               [r'county zoning board', r'county zoning commission', r'county planning board',
-                r'parish zoning board', r'parish zoning commission', r'parish planning board'],
-               [r'town meeting'],
-               [r'environmental review board', r'environmental review committee', r'environmental commission',
-                r'environmental impact review board', r'environmental impact review committee',
-                r'environmental review advisory board', r'environmental review advisory committee',
-                r'environmental assessment board', r'environmental assessment committee'],
-               [r'accessory dwelling unit', r'accessory dwelling units', r'accessory apartment', r'accessory apartments',
-                r'accessory dwelling', r'accessory dwellings', r'accessory suite', r'accessory suites',
-                r'ancillary unit', r'ancillary units', r'basement apartment', r'basement apartments',
-                r'carriage house', r'carriage homes', r'carriage houses', r'carriage homes',
-                r'garden cottage', r'garden cottages', r'granny cottage', r'granny cottages', r'granny unit', r'granny units',
-                r'secondary suite', r'secondary suites', r'granny flat', r'granny flats', r'guest house', r'guest houses',
-                r'backyard cottage', r'backyard cottages', r'in-law unit', r'in-law units', r'in-law suite', r'in-law suites',
-                r'in-law flat', r'in-law flats', r'secondary unit', r'secondary units', r'secondary dwelling unit', r'secondary dwelling units',
-                r'laneway house' r'laneway houses', r'secondary dwelling unit', r'secondary dwelling units'],
-               [r'maximum height', r'building height', r'height'],
-               [r'parking spots', r'parking spaces', r'parking', r'off-street spaces require',
-                r'minimum parking require', r'minimum spaces require', r'vehicle', r'one space for'],
-               [r'residential districts', r'residential district', r'residential single-family district',
-                r'residential multi family district', r'residential single family district',
-                r'single residential', r'multiple residential', r'density residential',
-                r'zoning district schedules', r'three-family district', r'residential detached zones',
-                r'residential multi family district' r'residential multiple-family district', r'residential zone',
-                r'residential multi family district', r'zoning districts', r'zoning district', r'zone district',
-                r'multi family residential', r'single family residential', r'land use districts',
-                r'residential high density', r'residential medium density', r'rural residential',
-                r'residential one acre', r'residential two acre',
-                r'housing district', r'residence zone', r'residential zone', r'dwelling zone', r'multiuse zone',
-                r'mid-rise district', r'high-rise district', r'mixed use zone', r'overlay district', r'use regulation schedule',
-                r'housing (four stories or less) district',  r'residential overlay', r'one-family zone', r'multi family zone',
-                r'classes of districts', r'district', r'district that is designed to', r'residence districts',
-                r'residential classifications', r'district regulations', r'creation of districts', r'dwelling district:',
-                r'r1 district', r'r2 district', r'r3 district', r'r4 district', r'r5 district', r'r6 district', r'r7 district',
-                r'r-1 district', r'r-2 district', r'r-3 district', r'r-4 district', r'residential-general district',
-                r'low density district', r'medium density district', r'high density district', r'rural density district',
-                r'general residence district', r'residential use district', r'residence district',
-                r'residential urban district', r'residential suburban district', r'residential limited business district',
-                r're residential-existing district', r'conservation district', 'r-16 district',
-                r'low density residential', r'medium density residential', r'rm district',
-                r'low density-residential', r'medium-density residential', r'medium-high-density residential',
-                r'r-1 residential.', r'r-2 residential.', r'r-3 residential.',
-                r'residence a district', r'residence aa district', r'residence b district', r'residence bb district',
-                r'residence c-1 district', r'residence c-2 district', r'residence cc district',
-                r'residence d district', r'residence dd district', r'residence e district', r'residence ee district',
-                r'residence f district', r'residence ff district', r'residence k district',
-                r'residence a-1', r'residence a-2', r'low-rise', r'medium-rise', r'high-rise',r'district',
-                r'residential urban zone', r'residential flexible zone', r'urban residence', r'suburban residence']]
+              ]
 
     with open(file1, 'r', errors='replace') as file:
         lines = file.read()
@@ -623,17 +393,20 @@ def getmatches(file1,sn):
         lines24 = re.sub(r'\d+\/\d+\/\d+\ssterling\scodifiers\sinc\.', '', lines23)
 
         test_str = []
-
         biglist1 = biglist  # copied for use in subsetting match data in list by question (e.g., element one in big list 1 will be question 1 here, but later question 1 will be replaced by all matches for question 1)
+        
         for question in biglist:
             for keyword in question:
-                #print("KEYWORD")
-                #print(keyword)
+                text_collector_num_rows += 1
+                text_collector_writer(text_collector_num_rows, 0, file1) #write the location
+                text_collector_writer(text_collector_num_rows, 1, measures[biglist.index(question)]) #write the measure
+                text_collector_writer(text_collector_num_rows, 2,keyword) #write the initial match
                 kws = re.findall(str(keyword), lines24, flags=re.IGNORECASE)
-                if not kws:
-                    continue
-                #print("MATCHING KEYWORD")
-                #print(kws)
+                number_of_kws = len(kws)
+                #if not kws:
+                    #print("Number of Matches Found: 0", end=",")
+                    #continue
+                text_collector_writer(text_collector_num_rows, 3,number_of_kws) #write the number of matches
                 kwpos = [m.start(0) for m in re.finditer(keyword, lines24, flags=re.IGNORECASE)]
                 #print("MATCHING KEYWORD POSITIONS")
                 #print(kwpos)
@@ -777,13 +550,14 @@ def getmatches(file1,sn):
 
                     for r in new_kwpos:
                         test_str.append(lines24[r[0]:r[1]])
-
+                
+                text_collector_writer(text_collector_num_rows, 4,test_str) #write the +-250 text
                 gen_matches.append(test_str)
-
+                #print(gen_matches)
             biglist1[biglist.index(
                 question)] = gen_matches  # puts matches for question in that questions element number in biglist1
             gen_matches = []
-            # matches = []
+
         for i in range(len(biglist1)):  # each element is matches for a specific question
             dict = dicts[i]
             wordslist = list(dict.keys())
@@ -799,8 +573,9 @@ def getmatches(file1,sn):
                     in_matches = []
                 matches_shell = []
                 out_matches.append(in_matches)
+                #print(out_matches)
             matches[i] = out_matches
-
+        counter=0
         numdouble = 0
         matches_shell = []
         for questions in matches:  # 27 elements representing each question in matches list
@@ -810,10 +585,21 @@ def getmatches(file1,sn):
                 for response in new:  # response represents a list within each keyword subset, each response is matches in one string retrieved from general keyword search
                     response_shell.append(list(set(response)))
                 new_shell.append(response_shell)
+                #print(response_shell)
+                counter += 1
+                text_collector_writer(num_row_text_collector()-17+counter, 5,response_shell) #write the weight match text
             matches_shell.append(new_shell)
     matches = matches_shell
+    #print(matches)
+    #print(num_row_text_collector())
+    #print(len(matches_shell))
 
-    return [matches, biglist1[6], biglist1[7], biglist1[24], biglist1[25], biglist1[26]]
+    #for row in range(num_row_text_collector()-len(matches), num_row_text_collector()):
+    #    print(row)
+    #    text_collector_writer(row, 5,matches[row]) #write the match text
+    return [matches]
+
+
 
 '''
 fractonum is a function to convert any numeric information stored as fractions into digits. The input is a 
@@ -4909,7 +4695,7 @@ def heightinfo(input1):
                               require\son\sstructures\swith\smore\sthan\s\d+\sstories|demolition\sof\sany\sbuilding\sexceeding|
                               which\sdo\snot\sexceed|any\skind\swhich\sis\sin\sexcess|mechanical\ssystems|
                               may\sbe\sincreased\sby\sone\sstory|to\s\d+\sor\smore|unenclosed\sporches|
-                              may\sbe\sincreased\sby\s1|p\-1\sdistrict|stories\.\s\d+|contain\smore\sthan\s\d+\sstory|♦
+                              may\sbe\sincreased\sby\s1|p\-1\sdistrict|stories\.\s\d+|contain\smore\sthan\s\d+\sstory|f
                               substance\sother\sthan\soil|for\s\d+\sstory|notes\:|parking\sstructure|
                               interior\sheight\sof\ssuch\sstory|noncombustible\scovering\:|for\sstructures\s\d+\sstories\sor|
                               so\slong\sas\sthe\smain\sbuilding\sis\slimit\sto|equivalent\sof\sthe\s\d+\sstory|
@@ -5153,6 +4939,7 @@ def parkinginfo(input1):
     return [parking_num]
 
 
+
 '''
 The matchvalue function is used to convert matches from the get_matches function into their respective weights. 
 This is done using the dictionaries pulled in with the get_keywords function above. The output is the same 
@@ -5168,6 +4955,7 @@ def matchvalue(inputs):
     matches_shell_final = []
     matches = inputs
     dicts = get_keywords()
+    counter = 0
     for q, question in enumerate(matches):
         dict = dicts[matches.index(question)]
         qweights = []
@@ -5180,13 +4968,21 @@ def matchvalue(inputs):
                     for key in dict.keys():
                         if word == key:
                             matches_shell1.append(float(dict[key]))
+                #print(matches_shell1)
                 matches_shell2.append(matches_shell1)
+                #print(matches_shell2)
+                #text_collector_writer(num_row_text_collector()-17+counter, 6,matches_shell2) #write the weight values
                 matches_shell1 = []
             matches_shell3.append(matches_shell2)
+            #print(matches_shell3)
+            counter += 1
+            text_collector_writer(num_row_text_collector()-17+counter, 6,matches_shell3) #write the weight values
             matches_shell2 = []
         matches_shell_final.append(matches_shell3)
+        #print(matches_shell_final)
         matches_shell3 = []
     return matches_shell_final
+
 
 
 '''
@@ -5203,6 +4999,9 @@ def thresholdmark(inputs):
     thresholds_new = []
     thresholds_final = []
     match_values = matchvalue(inputs)
+    #print(inputs)
+    #print(match_values)
+    counter=0
     for question in match_values:
         for new in question:
             for response in new:
@@ -5211,11 +5010,20 @@ def thresholdmark(inputs):
                     thresholds_res.append(1)
                 else:
                     thresholds_res.append(0)
+            counter += 1
+            text_collector_writer(num_row_text_collector()-17+counter, 7,thresholds_res) #write the weight sum
+            #print(thresholds_res)
             test = sum(thresholds_res)
             thresholds_res = []
+            #print(test)
             thresholds_new.append(test)
+            #print(thresholds_new)
         thresholds_final.append(thresholds_new)
+        #print(thresholds_final)
         thresholds_new = []
+    #print(thresholds_final)  
+
+
     return thresholds_final
 
 
@@ -5234,54 +5042,57 @@ is finfun(list of files).
 
 '''
 
+
+
+
 def finfun(filenames):
     # print(biglist1)
     outxl = xlwt.Workbook()
     outsheet = outxl.add_sheet('Municipalities', cell_overwrite_ok=True)
     errorsheet = outxl.add_sheet('Error Cities')
     outsheet.write(0, 0, "muni")
-    outsheet.write(0, 1, "restrict_sf_permit")
-    outsheet.write(0, 2, "restrict_mf_permit")
-    outsheet.write(0, 3, "limit_sf_units")
-    outsheet.write(0, 4, "limit_mf_units")
-    outsheet.write(0, 5, "limit_mf_dwellings")
-    outsheet.write(0, 6, "limit_mf_dwelling_units")
-    outsheet.write(0, 7, "min_lot_size")
-    outsheet.write(0, 8, "max_density")
-    outsheet.write(0, 9, "open_space")
-    outsheet.write(0, 10, "inclusionary")
-    outsheet.write(0, 11, "council_nz")
-    outsheet.write(0, 12, "planning_nz")
-    outsheet.write(0, 13, "countybrd_nz")
-    outsheet.write(0, 14, "pubhlth_nz")
-    outsheet.write(0, 15, "site_plan_nz")
-    outsheet.write(0, 16, "env_rev_nz")
-    outsheet.write(0, 17, "council_rz")
-    outsheet.write(0, 18, "planning_rz")
-    outsheet.write(0, 19, "zoning_rz")
-    outsheet.write(0, 20, "countybrd_rz")
-    outsheet.write(0, 21, "countyzone_rz")
-    outsheet.write(0, 22, "townmeet_rz")
-    outsheet.write(0, 23, "env_rev_rz")
-    outsheet.write(0, 24, "adu")
-    outsheet.write(0, 25, "half_acre_less")
-    outsheet.write(0, 26, "half_acre_more")
-    outsheet.write(0, 27, "one_acre_more")
-    outsheet.write(0, 28, "two_acre_more")
-    outsheet.write(0, 29, "max_den_cat1")
-    outsheet.write(0, 30, "max_den_cat2")
-    outsheet.write(0, 31, "max_den_cat3")
-    outsheet.write(0, 32, "max_den_cat4")
-    outsheet.write(0, 33, "max_den_cat5")
-    outsheet.write(0, 34, "height_ft_median")
-    outsheet.write(0, 35, "height_ft_mode")
-    outsheet.write(0, 36, "height_st_median")
-    outsheet.write(0, 37, "height_st_mode")
-    outsheet.write(0, 38, "parking_median")
-    outsheet.write(0, 39, "parking_mode")
-    outsheet.write(0, 40, "mf per")
-    outsheet.write(0, 41, "timestamp")
-    errorsheet.write(0, 0, 'muni')
+    outsheet.write(0, 1, "restrict_NA_permit")
+    outsheet.write(0, 2, "restrict_NA_units")
+    outsheet.write(0, 3, "limit_NA_dwellings")
+    outsheet.write(0, 4, "limit_NA_dwelling_units")
+    # outsheet.write(0, 5, "restrict_offi_permit")
+    # outsheet.write(0, 6, "restrict_offi_units")
+    # outsheet.write(0, 7, "limit_offi_dwellings")
+    # outsheet.write(0, 8, "limit_offi_dwelling_units")
+    # outsheet.write(0, 9, "restrict_lab_permit")
+    # outsheet.write(0, 10, "restrict_lab_units")
+    # outsheet.write(0, 11, "limit_lab_dwellings")
+    # outsheet.write(0, 12, "limit_lab_dwelling_units")
+    # outsheet.write(0, 13, "restrict_rese_permit")
+    # outsheet.write(0, 14, "restrict_rese_units")
+    # outsheet.write(0, 15, "limit_rese_dwellings")
+    # outsheet.write(0, 16, "limit_rese_dwelling_units")
+    # outsheet.write(0, 17, "restrict_comm_permit")
+    # outsheet.write(0, 18, "restrict_comm_units")
+    # outsheet.write(0, 19, "limit_comm_dwellings")
+    # outsheet.write(0, 20, "limit_comm_dwelling_units")
+    # outsheet.write(0, 21, "restrict_ind_permit")
+    # outsheet.write(0, 22, "restrict_ind_units")
+    # outsheet.write(0, 23, "limit_ind_dwellings")
+    # outsheet.write(0, 24, "limit_ind_dwelling_units") #Will edits
+    # outsheet.write(0, 25, "open_space")
+    # outsheet.write(0, 26, "half_acre_more")
+    # outsheet.write(0, 27, "one_acre_more")
+    # outsheet.write(0, 28, "two_acre_more")
+    # outsheet.write(0, 29, "max_den_cat1")
+    # outsheet.write(0, 30, "max_den_cat2")
+    # outsheet.write(0, 31, "max_den_cat3")
+    # outsheet.write(0, 32, "max_den_cat4")
+    # outsheet.write(0, 33, "max_den_cat5")
+    # outsheet.write(0, 34, "height_ft_median")
+    # outsheet.write(0, 35, "height_ft_mode")
+    # outsheet.write(0, 36, "height_st_median")
+    # outsheet.write(0, 37, "height_st_mode")
+    # outsheet.write(0, 38, "parking_median")
+    # outsheet.write(0, 39, "parking_mode")
+    # outsheet.write(0, 40, "mf per")
+    # outsheet.write(0, 41, "timestamp")
+    # errorsheet.write(0, 0, 'muni')
     startrow = 1
     errorrow = 1
     for file in filenames:
@@ -5291,102 +5102,102 @@ def finfun(filenames):
             outsheet.write(startrow, 0, file)
             getmatches_res = getmatches(file,startrow)
             getmatches_othvars = getmatches_res[0]
-            getmatches_mls = getmatches_res[1]
-            getmatches_md = getmatches_res[2]
-            getmatches_h = getmatches_res[3]
-            getmatches_p = getmatches_res[4]
-            getmatches_rd = getmatches_res[5]
+            #getmatches_mls = getmatches_res[1]
+            #getmatches_md = getmatches_res[2]
+            #getmatches_h = getmatches_res[3]
+            #getmatches_p = getmatches_res[4]
+            #getmatches_rd = getmatches_res[5]
             thresholds_final = thresholdmark(getmatches_othvars)
-            dinfo1 = densityinfo(getmatches_mls, getmatches_md)
-            hinfo = heightinfo(getmatches_h)
-            pinfo = parkinginfo(getmatches_p)
-            mls1 = dinfo1[0]
-            md1 = dinfo1[1]
-            mf_dis_per = resdis(getmatches_rd)
-            dinfo3 = buildtablel1(getmatches_mls, getmatches_md)
-            mls3 = dinfo3[0]
-            md3 = dinfo3[1]
-            dinfo4 = buildtablel2(getmatches_mls, getmatches_md)
-            mls4 = dinfo4[0]
-            md4 = dinfo4[1]
-            mls = mls1 + mls3 + mls4
-            md = md1 + md3 + md4
-            mls_full = list(dict.fromkeys(mls))
-            md_full = list(dict.fromkeys(md))
-            park = pinfo[0]
-            hft1 = hinfo[0]
-            hst1 = hinfo[1]
-            ht2_ft = dinfo3[2]
-            ht2_st = dinfo3[3]
-            ht3_ft = dinfo4[2]
-            ht3_st = dinfo4[3]
+            #dinfo1 = densityinfo(getmatches_mls, getmatches_md)
+            #hinfo = heightinfo(getmatches_h)
+            #pinfo = parkinginfo(getmatches_p)
+            #mls1 = dinfo1[0]
+            #md1 = dinfo1[1]
+            #mf_dis_per = resdis(getmatches_rd)
+            #dinfo3 = buildtablel1(getmatches_mls, getmatches_md)
+            #mls3 = dinfo3[0]
+            #md3 = dinfo3[1]
+            #dinfo4 = buildtablel2(getmatches_mls, getmatches_md)
+            #mls4 = dinfo4[0]
+            #md4 = dinfo4[1]
+            #mls = mls1 + mls3 + mls4
+            #md = md1 + md3 + md4
+            #mls_full = list(dict.fromkeys(mls))
+            #md_full = list(dict.fromkeys(md))
+            #park = pinfo[0]
+            #hft1 = hinfo[0]
+            #hst1 = hinfo[1]
+            #ht2_ft = dinfo3[2]
+            #ht2_st = dinfo3[3]
+            #ht3_ft = dinfo4[2]
+            #ht3_st = dinfo4[3]
             hft2 = []
             hst2 = []
             hft3 = []
             hst3 = []
-            for h in ht2_ft:
-                if float(h) > 10:
-                    hft2.append(h)
-            for h in ht2_st:
-                hst2.append(h)
-            for h in ht3_ft:
-                if float(h) > 10:
-                    hft3.append(h)
-            for h in ht3_st:
-                hst3.append(h)
-            ht_ft_all = hft1 + hft2 + hft3
-            ht_st_all = hst1 + hst2 + hst3
-            ht_ft_uni = list(dict.fromkeys(ht_ft_all))
-            ht_st_uni = list(dict.fromkeys(ht_st_all))
-            if ht_ft_all:
-                hinfo_ft_median = statistics.median(ht_ft_all)
-            else:
-                hinfo_ft_median = None
-            if ht_ft_all:
-                hinfo_ft_mode = statistics.mode(ht_ft_all)
-            else:
-                hinfo_ft_mode = None
-            if ht_st_all:
-                hinfo_st_median = statistics.median(ht_st_all)
-            else:
-                hinfo_st_median = None
-            if ht_st_all:
-                hinfo_st_mode = statistics.mode(ht_st_all)
-            else:
-                hinfo_st_mode = None
+            # for h in ht2_ft:
+            #     if float(h) > 10:
+            #         hft2.append(h)
+            # for h in ht2_st:
+            #     hst2.append(h)
+            # for h in ht3_ft:
+            #     if float(h) > 10:
+            #         hft3.append(h)
+            # for h in ht3_st:
+            #     hst3.append(h)
+            # ht_ft_all = hft1 + hft2 + hft3
+            # ht_st_all = hst1 + hst2 + hst3
+            # ht_ft_uni = list(dict.fromkeys(ht_ft_all))
+            # ht_st_uni = list(dict.fromkeys(ht_st_all))
+            # if ht_ft_all:
+            #     hinfo_ft_median = statistics.median(ht_ft_all)
+            # else:
+            #     hinfo_ft_median = None
+            # if ht_ft_all:
+            #     hinfo_ft_mode = statistics.mode(ht_ft_all)
+            # else:
+            #     hinfo_ft_mode = None
+            # if ht_st_all:
+            #     hinfo_st_median = statistics.median(ht_st_all)
+            # else:
+            #     hinfo_st_median = None
+            # if ht_st_all:
+            #     hinfo_st_mode = statistics.mode(ht_st_all)
+            # else:
+            #     hinfo_st_mode = None
 
-            if park:
-                pinfo_median = statistics.median(park)
-            else:
-                pinfo_median = None
-            if park:
-                pinfo_mode = statistics.mode(park)
-            else:
-                pinfo_mode = None
+            # if park:
+            #     pinfo_median = statistics.median(park)
+            # else:
+            #     pinfo_median = None
+            # if park:
+            #     pinfo_mode = statistics.mode(park)
+            # else:
+            #     pinfo_mode = None
             mls_int = []
             md_int = []
-            for i in mls_full:
-                mls_int.append(str(i).replace(',', ''))
-            for i in md_full:
-                md_int.append(str(i).replace(',', ''))
-            mls_final = []
-            md_final = []
-            for x in mls_int:
-                try:
-                    x = re.sub(r'(\d+)/(\d+)', lambda m: str(float(m.group(1)) / float(m.group(2))), x)
-                    mls_final.append(float(x))
-                except ZeroDivisionError as error:
-                    continue
-                except ValueError:
-                    continue
-            for x in md_int:
-                try:
-                    x = re.sub(r'(\d+)/(\d+)', lambda m: str(float(m.group(1)) / float(m.group(2))), x)
-                    md_final.append(float(x))
-                except ZeroDivisionError as error:
-                    continue
-                except ValueError:
-                    continue
+            # for i in mls_full:
+            #     mls_int.append(str(i).replace(',', ''))
+            # for i in md_full:
+            #     md_int.append(str(i).replace(',', ''))
+            # mls_final = []
+            # md_final = []
+            # for x in mls_int:
+            #     try:
+            #         x = re.sub(r'(\d+)/(\d+)', lambda m: str(float(m.group(1)) / float(m.group(2))), x)
+            #         mls_final.append(float(x))
+            #     except ZeroDivisionError as error:
+            #         continue
+            #     except ValueError:
+            #         continue
+            # for x in md_int:
+            #     try:
+            #         x = re.sub(r'(\d+)/(\d+)', lambda m: str(float(m.group(1)) / float(m.group(2))), x)
+            #         md_final.append(float(x))
+            #     except ZeroDivisionError as error:
+            #         continue
+            #     except ValueError:
+            #         continue
             #print(mls_final)
             #print(md_final)
 
@@ -5397,113 +5208,113 @@ def finfun(filenames):
                 else:
                     outsheet.write(startrow, startcol, 0)
                 startcol += 1
-            for x in mls_final:
-                if 1000 < float(x) < 21780 or 0 < float(x) < 0.5:
-                    outsheet.write(startrow, 25, 1)
-                    break
-                else:
-                    outsheet.write(startrow, 25, 0)
-            for x in mls_final:
-                if 21780 <= float(x) < 43560 or 0.5 <= float(x) < 1:
-                    outsheet.write(startrow, 26, 1)
-                    break
-                else:
-                    outsheet.write(startrow, 26, 0)
-            for x in mls_final:
-                if 43560 <= float(x) < 87120 or 1 <= float(x) < 2:
-                    outsheet.write(startrow, 27, 1)
-                    break
-                else:
-                    outsheet.write(startrow, 27, 0)
-            for x in mls_final:
-                if 87120 <= float(x) <= 217800 or 2 <= float(x) <= 50:
-                    outsheet.write(startrow, 28, 1)
-                    break
-                else:
-                    outsheet.write(startrow, 28, 0)
-            if not md_final:
-                if not mls_final:
-                    outsheet.write(startrow, 29, 1)
-                    outsheet.write(startrow, 30, 0)
-                    outsheet.write(startrow, 31, 0)
-                    outsheet.write(startrow, 32, 0)
-                    outsheet.write(startrow, 33, 0)
-                else:
-                    for x in mls_final:
-                        if float(x) > 10890:
-                            outsheet.write(startrow, 29, 1)
-                            outsheet.write(startrow, 30, 0)
-                            outsheet.write(startrow, 31, 0)
-                            outsheet.write(startrow, 32, 0)
-                            outsheet.write(startrow, 33, 0)
-                    for x in mls_final:
-                        if 6223 < float(x) <= 10890:
-                            outsheet.write(startrow, 29, 1)
-                            outsheet.write(startrow, 30, 1)
-                            outsheet.write(startrow, 31, 0)
-                            outsheet.write(startrow, 32, 0)
-                            outsheet.write(startrow, 33, 0)
-                    for x in mls_final:
-                        if 3111 < float(x) <= 6223:
-                            outsheet.write(startrow, 29, 1)
-                            outsheet.write(startrow, 30, 1)
-                            outsheet.write(startrow, 31, 1)
-                            outsheet.write(startrow, 32, 0)
-                            outsheet.write(startrow, 33, 0)
-                    for x in mls_final:
-                        if 1452 < float(x) <= 3111:
-                            outsheet.write(startrow, 29, 1)
-                            outsheet.write(startrow, 30, 1)
-                            outsheet.write(startrow, 31, 1)
-                            outsheet.write(startrow, 32, 1)
-                            outsheet.write(startrow, 33, 0)
-                    for x in mls_final:
-                        if 500 < float(x) <= 1452:
-                            outsheet.write(startrow, 29, 1)
-                            outsheet.write(startrow, 30, 1)
-                            outsheet.write(startrow, 31, 1)
-                            outsheet.write(startrow, 32, 1)
-                            outsheet.write(startrow, 33, 1)
-            else:
-                for x in md_final:
-                    if 0 < float(x) <= 4 or float(x) > 10890:
-                        outsheet.write(startrow, 29, 1)
-                        break
-                    else:
-                        outsheet.write(startrow, 29, 0)
-                for x in md_final:
-                    if 4 < float(x) <= 7 or 6223 < float(x) <= 10890:
-                        outsheet.write(startrow, 30, 1)
-                        break
-                    else:
-                        outsheet.write(startrow, 30, 0)
-                for x in md_final:
-                    if 7 < float(x) <= 14 or 3111 < float(x) <= 6223:
-                        outsheet.write(startrow, 31, 1)
-                        break
-                    else:
-                        outsheet.write(startrow, 31, 0)
-                for x in md_final:
-                    if 14 < float(x) <= 30 or 1452 < float(x) <= 3111:
-                        outsheet.write(startrow, 32, 1)
-                        break
-                    else:
-                        outsheet.write(startrow, 32, 0)
-                for x in md_final:
-                    if 30 < float(x) <= 165 or 380 < float(x) <= 1452:
-                        outsheet.write(startrow, 33, 1)
-                        break
-                    else:
-                        outsheet.write(startrow, 33, 0)
-            outsheet.write(startrow, 34, hinfo_ft_median)
-            outsheet.write(startrow, 35, hinfo_ft_mode)
-            outsheet.write(startrow, 36, hinfo_st_median)
-            outsheet.write(startrow, 37, hinfo_st_mode)
-            outsheet.write(startrow, 38, pinfo_median)
-            outsheet.write(startrow, 39, pinfo_mode)
-            outsheet.write(startrow, 40, mf_dis_per)
-            ts = get_ts(file)
-            outsheet.write(startrow, 41, ts)
+            # for x in mls_final:
+            #     if 1000 < float(x) < 21780 or 0 < float(x) < 0.5:
+            #         #outsheet.write(startrow, 25, 1)
+            #         break
+            #     #else:
+            #         #outsheet.write(startrow, 25, 0)
+            # for x in mls_final:
+            #     if 21780 <= float(x) < 43560 or 0.5 <= float(x) < 1:
+            #         outsheet.write(startrow, 26, 1)
+            #         break
+            #     else:
+            #         outsheet.write(startrow, 26, 0)
+            # for x in mls_final:
+            #     if 43560 <= float(x) < 87120 or 1 <= float(x) < 2:
+            #         outsheet.write(startrow, 27, 1)
+            #         break
+            #     else:
+            #         outsheet.write(startrow, 27, 0)
+            # for x in mls_final:
+            #     if 87120 <= float(x) <= 217800 or 2 <= float(x) <= 50:
+            #         outsheet.write(startrow, 28, 1)
+            #         break
+            #     else:
+            #         outsheet.write(startrow, 28, 0)
+            # if not md_final:
+            #     if not mls_final:
+            #         outsheet.write(startrow, 29, 1)
+            #         outsheet.write(startrow, 30, 0)
+            #         outsheet.write(startrow, 31, 0)
+            #         outsheet.write(startrow, 32, 0)
+            #         outsheet.write(startrow, 33, 0)
+            #     else:
+            #         for x in mls_final:
+            #             if float(x) > 10890:
+            #                 outsheet.write(startrow, 29, 1)
+            #                 outsheet.write(startrow, 30, 0)
+            #                 outsheet.write(startrow, 31, 0)
+            #                 outsheet.write(startrow, 32, 0)
+            #                 outsheet.write(startrow, 33, 0)
+            #         for x in mls_final:
+            #             if 6223 < float(x) <= 10890:
+            #                 outsheet.write(startrow, 29, 1)
+            #                 outsheet.write(startrow, 30, 1)
+            #                 outsheet.write(startrow, 31, 0)
+            #                 outsheet.write(startrow, 32, 0)
+            #                 outsheet.write(startrow, 33, 0)
+            #         for x in mls_final:
+            #             if 3111 < float(x) <= 6223:
+            #                 outsheet.write(startrow, 29, 1)
+            #                 outsheet.write(startrow, 30, 1)
+            #                 outsheet.write(startrow, 31, 1)
+            #                 outsheet.write(startrow, 32, 0)
+            #                 outsheet.write(startrow, 33, 0)
+            #         for x in mls_final:
+            #             if 1452 < float(x) <= 3111:
+            #                 outsheet.write(startrow, 29, 1)
+            #                 outsheet.write(startrow, 30, 1)
+            #                 outsheet.write(startrow, 31, 1)
+            #                 outsheet.write(startrow, 32, 1)
+            #                 outsheet.write(startrow, 33, 0)
+            #         for x in mls_final:
+            #             if 500 < float(x) <= 1452:
+            #                 outsheet.write(startrow, 29, 1)
+            #                 outsheet.write(startrow, 30, 1)
+            #                 outsheet.write(startrow, 31, 1)
+            #                 outsheet.write(startrow, 32, 1)
+            #                 outsheet.write(startrow, 33, 1)
+            # else:
+            #     for x in md_final:
+            #         if 0 < float(x) <= 4 or float(x) > 10890:
+            #             outsheet.write(startrow, 29, 1)
+            #             break
+            #         else:
+            #             outsheet.write(startrow, 29, 0)
+            #     for x in md_final:
+            #         if 4 < float(x) <= 7 or 6223 < float(x) <= 10890:
+            #             outsheet.write(startrow, 30, 1)
+            #             break
+            #         else:
+            #             outsheet.write(startrow, 30, 0)
+            #     for x in md_final:
+            #         if 7 < float(x) <= 14 or 3111 < float(x) <= 6223:
+            #             outsheet.write(startrow, 31, 1)
+            #             break
+            #         else:
+            #             outsheet.write(startrow, 31, 0)
+            #     for x in md_final:
+            #         if 14 < float(x) <= 30 or 1452 < float(x) <= 3111:
+            #             outsheet.write(startrow, 32, 1)
+            #             break
+            #         else:
+            #             outsheet.write(startrow, 32, 0)
+            #     for x in md_final:
+            #         if 30 < float(x) <= 165 or 380 < float(x) <= 1452:
+            #             outsheet.write(startrow, 33, 1)
+            #             break
+            #         else:
+            #             outsheet.write(startrow, 33, 0)
+            # outsheet.write(startrow, 34, hinfo_ft_median)
+            # outsheet.write(startrow, 35, hinfo_ft_mode)
+            # outsheet.write(startrow, 36, hinfo_st_median)
+            # outsheet.write(startrow, 37, hinfo_st_mode)
+            # outsheet.write(startrow, 38, pinfo_median)
+            # outsheet.write(startrow, 39, pinfo_mode)
+            # outsheet.write(startrow, 40, mf_dis_per)
+            # ts = get_ts(file)
+            # outsheet.write(startrow, 41, ts)
             print(file, "post sheet")
             startrow += 1
         except UnicodeDecodeError:
@@ -5517,5 +5328,6 @@ def finfun(filenames):
 
 filenames = sorted(glob.glob(filedirect + "*.txt")) # finds all .txt files in the folder your code is saved in
 finfun(filenames)  # the final function
+
 
 
